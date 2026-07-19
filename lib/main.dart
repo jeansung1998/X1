@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'models/wallpaper.dart';
+import 'services/supabase_service.dart';
+import 'screens/purchase_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/search_screen.dart';
+import 'screens/library_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://mrekzpvquibgqtnnhkxd.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yZWt6cHZxdWliZ3F0bm5oa3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzOTgwMjUsImV4cCI6MjA5OTk3NDAyNX0.3ZTCsaW3ZGn34ly8ds9DGjU_l-F9RU3U7r8ddRuPTio',
+  );
+  await ThemeNotifier().loadTheme();
   runApp(const X1App());
 }
 
@@ -10,17 +26,22 @@ class X1App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'RYKER',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF080808),
-        textTheme: GoogleFonts.josefinSansTextTheme().apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-        ),
-      ),
-      home: const HomeScreen(),
+    return AnimatedBuilder(
+      animation: ThemeNotifier(),
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'RYKER',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            scaffoldBackgroundColor: Colors.transparent,
+            textTheme: GoogleFonts.josefinSansTextTheme().apply(
+              bodyColor: ThemeNotifier().contentColor,
+              displayColor: ThemeNotifier().contentColor,
+            ),
+          ),
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }
@@ -35,49 +56,136 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategory = 0;
   final List<String> _categories = ['All', 'Nature', 'Space', 'City', 'Cyber', '3D'];
+  List<Wallpaper> _items = [];
+  bool _loading = true;
+  Set<String> _wishlistIds = {};
 
-  final List<Map<String, dynamic>> _items = [
-    {'title': 'Deep Tide', 'price': '₩3,900', 'category': 'Nature', 'color': const Color(0xFF0A2A4A)},
-    {'title': 'Orion Drift', 'price': '₩3,900', 'category': 'Space', 'color': const Color(0xFF050510)},
-    {'title': 'Mist Pines', 'price': '₩3,900', 'category': 'Nature', 'color': const Color(0xFF0A1A0A)},
-    {'title': 'Midnight Spire', 'price': '₩3,900', 'category': 'City', 'color': const Color(0xFF0A0A1A)},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    setState(() => _loading = true);
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id ?? 'test_user';
+      final category = _categories[_selectedCategory];
+      final results = await Future.wait([
+        SupabaseService.getWallpapers(category: category == 'All' ? null : category),
+        SupabaseService.getWishlistIds(userId),
+      ]);
+      setState(() {
+        _items = results[0] as List<Wallpaper>;
+        _wishlistIds = Set<String>.from(results[1] as List<String>);
+      });
+    } catch (e) {
+      debugPrint('Error: $e');
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleWishlist(Wallpaper item) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? 'test_user';
+    final isLiked = _wishlistIds.contains(item.id);
+    setState(() {
+      if (isLiked) {
+        _wishlistIds.remove(item.id);
+      } else {
+        _wishlistIds.add(item.id);
+      }
+    });
+    try {
+      if (isLiked) {
+        await SupabaseService.removeWishlist(userId, item.id);
+      } else {
+        await SupabaseService.addWishlist(userId, item.id);
+      }
+    } catch (e) {
+      setState(() {
+        if (isLiked) {
+          _wishlistIds.add(item.id);
+        } else {
+          _wishlistIds.remove(item.id);
+        }
+      });
+    }
+  }
+
+  bool get _isLight => ThemeNotifier().current.isLight;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildCategories(),
-            Expanded(child: _buildGrid()),
-          ],
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: ThemeNotifier(),
+      builder: (context, _) {
+        final contentColor = ThemeNotifier().contentColor;
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Container(
+            decoration: ThemeNotifier().backgroundDecoration,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(contentColor),
+                  _buildCategories(contentColor),
+                  Expanded(child: _loading ? _buildLoading() : _buildGrid()),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildLoading() {
+    return const Center(
+      child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 1),
+    );
+  }
+
+  Widget _buildHeader(Color contentColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'RYKER',
+          Text('RYKER',
             style: GoogleFonts.josefinSans(
-              fontSize: 16,
-              fontWeight: FontWeight.w200,
-              letterSpacing: 6,
-              color: Colors.white,
-            ),
-          ),
+              fontSize: 16, fontWeight: FontWeight.w600,
+              letterSpacing: 6, color: contentColor)),
           Row(
             children: [
-              IconButton(icon: const Icon(Icons.search, color: Colors.white54, size: 22), onPressed: () {}),
-              IconButton(icon: const Icon(Icons.bookmark_border, color: Colors.white54, size: 22), onPressed: () {}),
-              IconButton(icon: const Icon(Icons.settings_outlined, color: Colors.white54, size: 22), onPressed: () {}),
+              IconButton(
+                icon: Icon(Icons.search, color: contentColor, size: 22),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchScreen()),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.favorite_border, color: contentColor, size: 22),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LibraryScreen()),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.settings_outlined, color: contentColor, size: 22),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.person_outline, color: contentColor, size: 22),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                ),
+              ),
             ],
           ),
         ],
@@ -85,7 +193,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCategories() {
+  Widget _buildCategories(Color contentColor) {
+    final inactiveColor = _isLight
+        ? const Color(0xFF333333)
+        : Colors.white70;
     return SizedBox(
       height: 40,
       child: ListView.builder(
@@ -95,28 +206,24 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, index) {
           final selected = _selectedCategory == index;
           return GestureDetector(
-            onTap: () => setState(() => _selectedCategory = index),
+            onTap: () {
+              setState(() => _selectedCategory = index);
+              _loadAll();
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    _categories[index],
+                  Text(_categories[index],
                     style: GoogleFonts.josefinSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w200,
+                      fontSize: 13, fontWeight: FontWeight.w600,
                       letterSpacing: 2,
-                      color: selected ? Colors.white : Colors.white60,
-                    ),
-                  ),
+                      color: selected ? contentColor : inactiveColor)),
                   const SizedBox(height: 3),
-                  Container(
-                    height: 1,
-                    width: 20,
-                    color: selected ? Colors.white : Colors.transparent,
-                  ),
+                  Container(height: 1, width: 20,
+                    color: selected ? contentColor : Colors.transparent),
                 ],
               ),
             ),
@@ -127,6 +234,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGrid() {
+    if (_items.isEmpty) {
+      return Center(
+        child: Text('No items', style: GoogleFonts.josefinSans(
+          color: Colors.white54, fontSize: 12, letterSpacing: 2)),
+      );
+    }
     return GridView.builder(
       padding: EdgeInsets.zero,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -140,20 +253,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildThumbnail(Map<String, dynamic> item) {
+  Widget _buildThumbnail(Wallpaper item) {
+    final isLiked = _wishlistIds.contains(item.id);
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PurchaseScreen(item: item),
-          ),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => PurchaseScreen(item: item)),
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Container(color: item['color'] as Color),
+          item.thumbnailUrl != null
+              ? CachedNetworkImage(
+                  imageUrl: item.thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) =>
+                      Container(color: const Color(0xFF111111)),
+                  errorWidget: (context, url, error) =>
+                      Container(color: const Color(0xFF111111)),
+                )
+              : Container(color: const Color(0xFF111111)),
           Positioned(
             bottom: 0, left: 0, right: 0,
             child: Container(
@@ -173,228 +292,34 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item['title'],
-                      style: GoogleFonts.josefinSans(
-                        fontSize: 13, fontWeight: FontWeight.w300, color: Colors.white,
-                      ),
-                    ),
-                    Text(item['price'],
-                      style: GoogleFonts.josefinSans(
-                        fontSize: 11, fontWeight: FontWeight.w200, color: Colors.white60,
-                      ),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.josefinSans(
+                          fontSize: 13, fontWeight: FontWeight.w600,
+                          color: Colors.white)),
+                      Text(item.priceLabel,
+                        style: GoogleFonts.josefinSans(
+                          fontSize: 11, fontWeight: FontWeight.w300,
+                          color: Colors.white70)),
+                    ],
+                  ),
                 ),
-                const Icon(Icons.favorite_border, color: Colors.white54, size: 18),
+                GestureDetector(
+                  onTap: () => _toggleWishlist(item),
+                  child: Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: isLiked ? Colors.redAccent : Colors.white70,
+                    size: 18,
+                  ),
+                ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class PurchaseScreen extends StatelessWidget {
-  final Map<String, dynamic> item;
-  const PurchaseScreen({super.key, required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF080808),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white70, size: 18),
-                  ),
-                  const SizedBox(width: 16),
-                  Text('결제',
-                    style: GoogleFonts.josefinSans(
-                      fontSize: 14, fontWeight: FontWeight.w200,
-                      letterSpacing: 4, color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 110,
-                        height: 196,
-                        decoration: BoxDecoration(
-                          color: item['color'] as Color,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 8, right: 8,
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FullscreenScreen(item: item),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Text('전체 보기',
-                              style: GoogleFonts.josefinSans(
-                                fontSize: 9, fontWeight: FontWeight.w200,
-                                color: Colors.white70, letterSpacing: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
-                        Text(item['title'],
-                          style: GoogleFonts.josefinSans(
-                            fontSize: 16, fontWeight: FontWeight.w200,
-                            color: Colors.white, letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text('9:16  ·  4K  ·  10s',
-                          style: GoogleFonts.josefinSans(
-                            fontSize: 11, fontWeight: FontWeight.w200,
-                            color: Colors.white70, letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(item['price'],
-                          style: GoogleFonts.josefinSans(
-                            fontSize: 20, fontWeight: FontWeight.w200,
-                            color: Colors.white, letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('일회성 구매',
-                          style: GoogleFonts.josefinSans(
-                            fontSize: 10, fontWeight: FontWeight.w200,
-                            color: Colors.white70, letterSpacing: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Divider(color: Colors.white10, height: 1),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _policyText('구매 후 환불은 불가합니다'),
-                    _policyText('개인 사용 목적으로만 사용 가능하며 재배포 및 상업적 사용을 금합니다'),
-                    _policyText('결제는 Apple App Store / Google Play 정책을 따릅니다'),
-                    _policyText('본 콘텐츠의 저작권 및 소유권은 RYKER에 있으며 무단 복제 및 배포를 금합니다'),
-                    _policyText('문의: support@ryker.kr'),
-                  ],
-                ),
-              ),
-            ),
-            const Divider(color: Colors.white10, height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text('구매하기',
-                    style: GoogleFonts.josefinSans(
-                      fontSize: 13, fontWeight: FontWeight.w300, letterSpacing: 4,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _policyText(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text('· $text',
-        style: GoogleFonts.josefinSans(
-          fontSize: 9, fontWeight: FontWeight.w200,
-          color: Colors.white60, letterSpacing: 0.5, height: 1.6,
-        ),
-      ),
-    );
-  }
-}
-
-class FullscreenScreen extends StatelessWidget {
-  final Map<String, dynamic> item;
-  const FullscreenScreen({super.key, required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: () => Navigator.pop(context),
-        child: SizedBox.expand(
-          child: Container(
-            color: item['color'] as Color,
-            child: Align(
-              alignment: Alignment.center,
-              child: Text(
-                item['title'],
-                style: GoogleFonts.josefinSans(
-                  fontSize: 24, fontWeight: FontWeight.w200,
-                  color: Colors.white24, letterSpacing: 4,
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
