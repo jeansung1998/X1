@@ -139,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(user?.email?.split('@')[0].toUpperCase() ?? 'RYKER USER',
+          Text(user?.email?.split('@')[0].toUpperCase() ?? 'FOLLOOK USER',
             style: GoogleFonts.josefinSans(
               fontSize: 15, fontWeight: FontWeight.w600,
               letterSpacing: 3, color: _contentColor)),

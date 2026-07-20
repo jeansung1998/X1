@@ -87,7 +87,7 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('RYKER',
+                Text('FOLLOOK',
                   style: GoogleFonts.josefinSans(
                     fontSize: 28, fontWeight: FontWeight.w100,
                     letterSpacing: 12, color: Colors.white)),

@@ -30,7 +30,7 @@ class X1App extends StatelessWidget {
       animation: ThemeNotifier(),
       builder: (context, _) {
         return MaterialApp(
-          title: 'RYKER',
+          title: 'FOLLOOK',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             scaffoldBackgroundColor: Colors.transparent,
@@ -152,10 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('RYKER',
+          Text('FOLLOOK',
             style: GoogleFonts.josefinSans(
               fontSize: 16, fontWeight: FontWeight.w600,
-              letterSpacing: 6, color: contentColor)),
+              letterSpacing: 2, color: contentColor)),
           Row(
             children: [
               IconButton(

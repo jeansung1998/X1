@@ -69,11 +69,11 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('RYKER',
+                  Text('FOLLOOK',
                     style: GoogleFonts.josefinSans(
-                      fontSize: 36,
+                      fontSize: 32,
                       fontWeight: FontWeight.w100,
-                      letterSpacing: 10,
+                      letterSpacing: 4,
                       color: Colors.white)),
                   const SizedBox(height: 24),
                   AnimatedBuilder(

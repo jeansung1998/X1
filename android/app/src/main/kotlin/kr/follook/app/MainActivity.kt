@@ -1,4 +1,4 @@
-package com.example.x1
+package kr.follook.app
 
 import io.flutter.embedding.android.FlutterActivity
 
